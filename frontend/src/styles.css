@@ -50,6 +50,33 @@ body {
   color: #9ca3af;
 }
 
+.chat-header-sub {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mode-switch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.mode-switch label {
+  color: #9ca3af;
+}
+
+.mode-switch select {
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.9);
+  background: rgba(15, 23, 42, 0.9);
+  color: #e5e7eb;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
 .chat-messages {
   flex: 1;
   padding: 16px 20px;

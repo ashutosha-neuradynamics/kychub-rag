@@ -1,7 +1,7 @@
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
 from openai import OpenAI
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 import logging
 import os
 from dotenv import load_dotenv
@@ -93,7 +93,7 @@ class QdrantVectorStore:
 
         return embeddings
 
-    def add_documents(self, documents: List[Dict[str, any]]):
+    def add_documents(self, documents: List[Dict[str, Any]]):
         if not documents:
             logger.warning("No documents to add")
             return
@@ -123,7 +123,7 @@ class QdrantVectorStore:
             logger.error("Error adding documents: %s", str(e))
             raise
 
-    def search(self, query: str, top_k: int = 5) -> List[Dict[str, any]]:
+    def search(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
         try:
             response = self.openai_client.embeddings.create(
                 model=self.model_name, input=[query]
@@ -144,6 +144,7 @@ class QdrantVectorStore:
             for result in results:
                 search_results.append(
                     {
+                        "id": result.id,
                         "score": result.score,
                         "url": result.payload.get("url", ""),
                         "title": result.payload.get("title", ""),
@@ -157,6 +158,43 @@ class QdrantVectorStore:
         except Exception as e:
             logger.error("Error searching: %s", str(e))
             raise
+
+    def get_all_documents(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+        documents: List[Dict[str, Any]] = []
+        offset = None
+
+        while True:
+            points, offset = self.client.scroll(
+                collection_name=self.collection_name,
+                limit=100,
+                offset=offset,
+                with_payload=True,
+                with_vectors=False,
+            )
+
+            if not points:
+                break
+
+            for p in points:
+                payload = p.payload or {}
+                documents.append(
+                    {
+                        "id": p.id,
+                        "url": payload.get("url", ""),
+                        "title": payload.get("title", ""),
+                        "content": payload.get("content", ""),
+                        "chunk_index": payload.get("chunk_index", 0),
+                        "total_chunks": payload.get("total_chunks", 1),
+                    }
+                )
+
+                if limit is not None and len(documents) >= limit:
+                    return documents
+
+            if offset is None:
+                break
+
+        return documents
 
     def delete_collection(self):
         try:

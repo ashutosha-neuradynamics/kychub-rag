@@ -1,5 +1,6 @@
 from vector_store import QdrantVectorStore
-from typing import List, Dict, Optional
+from bm25_retriever import BM25Retriever
+from typing import List, Dict, Optional, Any
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -22,15 +23,33 @@ class RAGSystem:
             qdrant_api_key=qdrant_api_key,
             openai_api_key=openai_api_key,
         )
+        # Build BM25 retriever from all stored chunks (keyword search)
+        all_docs = self.vector_store.get_all_documents()
+        self.bm25_retriever = BM25Retriever(all_docs) if all_docs else None
 
     def query(
-        self, question: str, top_k: int = 5, min_score: float = 0.3
+        self,
+        question: str,
+        top_k: int = 5,
+        min_score: float = 0.3,
+        mode: str = "semantic",
     ) -> Dict[str, any]:
-        search_results = self.vector_store.search(question, top_k=top_k)
-
-        filtered_results = [
-            result for result in search_results if result["score"] >= min_score
-        ]
+        if mode == "keyword":
+            if self.bm25_retriever is None:
+                return {
+                    "question": question,
+                    "answer": "No keyword index available yet. Please index documents first.",
+                    "sources": [],
+                    "confidence": 0.0,
+                }
+            filtered_results = self.bm25_retriever.search(question, top_k=top_k)
+        elif mode == "hybrid":
+            filtered_results = self._hybrid_search(question, top_k=top_k)
+        else:
+            semantic_results = self.vector_store.search(question, top_k=top_k)
+            filtered_results = [
+                result for result in semantic_results if result["score"] >= min_score
+            ]
 
         if not filtered_results:
             return {
@@ -49,6 +68,55 @@ class RAGSystem:
             "sources": filtered_results,
             "confidence": filtered_results[0]["score"] if filtered_results else 0.0,
         }
+
+    def _hybrid_search(self, question: str, top_k: int = 5) -> List[Dict[str, Any]]:
+        if self.bm25_retriever is None:
+            return self.vector_store.search(question, top_k=top_k)
+
+        semantic_results = self.vector_store.search(question, top_k=top_k * 2)
+        keyword_results = self.bm25_retriever.search(question, top_k=top_k * 2)
+
+        def _key(r: Dict[str, Any]) -> Any:
+            return (r.get("id"), r.get("url"), r.get("chunk_index"))
+
+        def _normalize(scores: Dict[Any, float]) -> Dict[Any, float]:
+            if not scores:
+                return {}
+            values = list(scores.values())
+            min_s, max_s = min(values), max(values)
+            if max_s == min_s:
+                return {k: 1.0 for k in scores}
+            return {k: (v - min_s) / (max_s - min_s) for k, v in scores.items()}
+
+        sem_scores = {_key(r): float(r["score"]) for r in semantic_results}
+        kw_scores = {_key(r): float(r["score"]) for r in keyword_results}
+
+        sem_norm = _normalize(sem_scores)
+        kw_norm = _normalize(kw_scores)
+
+        alpha = 0.6
+        combined: Dict[Any, Dict[str, Any]] = {}
+
+        base_index: Dict[Any, Dict[str, Any]] = {}
+        for r in semantic_results:
+            base_index[_key(r)] = r
+        for r in keyword_results:
+            k = _key(r)
+            if k not in base_index:
+                base_index[k] = r
+
+        for k, base in base_index.items():
+            sem_s = sem_norm.get(k, 0.0)
+            kw_s = kw_norm.get(k, 0.0)
+            score = alpha * sem_s + (1 - alpha) * kw_s
+            merged = dict(base)
+            merged["score"] = score
+            combined[k] = merged
+
+        sorted_results = sorted(
+            combined.values(), key=lambda r: r["score"], reverse=True
+        )
+        return sorted_results[:top_k]
 
     def _format_context(self, results: List[Dict[str, any]]) -> str:
         context_parts = []

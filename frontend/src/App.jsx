@@ -7,6 +7,7 @@ function App() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [mode, setMode] = useState("semantic");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -26,7 +27,7 @@ function App() {
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ question })
+        body: JSON.stringify({ question, mode })
       });
 
       if (!res.ok) {
@@ -54,7 +55,22 @@ function App() {
       <div className="chat-container">
         <header className="chat-header">
           <h1>KYC Hub RAG Chat</h1>
-          <p>Ask questions grounded in content from kychub.com</p>
+          <div className="chat-header-sub">
+            <p>Ask questions grounded in content from kychub.com</p>
+            <div className="mode-switch">
+              <label htmlFor="mode-select">Mode</label>
+              <select
+                id="mode-select"
+                value={mode}
+                onChange={(e) => setMode(e.target.value)}
+                disabled={loading}
+              >
+                <option value="semantic">Semantic</option>
+                <option value="keyword">Keyword (BM25)</option>
+                <option value="hybrid">Hybrid</option>
+              </select>
+            </div>
+          </div>
         </header>
 
         <div className="chat-messages">

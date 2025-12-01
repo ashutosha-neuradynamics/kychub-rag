@@ -11,6 +11,7 @@ from rag_system import RAGSystem
 
 class QueryRequest(BaseModel):
     question: str
+    mode: str | None = "semantic"  # "semantic", "keyword", or "hybrid"
 
 
 class Source(BaseModel):
@@ -83,7 +84,11 @@ def query_rag(req: QueryRequest) -> Dict[str, Any]:
     if rag_system is None:
         raise RuntimeError(f"RAG system not initialised: {startup_error}")
 
-    result = rag_system.query(req.question, top_k=5)
+    result = rag_system.query(
+        req.question,
+        top_k=5,
+        mode=(req.mode or "semantic"),
+    )
     # Ensure we only return serialisable data
     sources_clean: List[Dict[str, Any]] = []
     for src in result.get("sources", []):
