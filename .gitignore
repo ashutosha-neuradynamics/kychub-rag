@@ -36,4 +36,10 @@ scraped_content.json
 # Cursor / tooling
 .cursor/
 
+# Node / frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+
 

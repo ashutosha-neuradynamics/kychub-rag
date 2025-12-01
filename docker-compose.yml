@@ -1,0 +1,31 @@
+version: "3.9"
+
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: kychub-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+
+  backend:
+    build: .
+    container_name: kychub-backend
+    depends_on:
+      - qdrant
+    environment:
+      # Point backend to qdrant service inside the compose network
+      QDRANT_URL: "http://qdrant:6333"
+      # Optionally set via .env or shell, not stored in repo
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      QDRANT_API_KEY: ${QDRANT_API_KEY-}
+      RAG_COLLECTION_NAME: ${RAG_COLLECTION_NAME-kychub_documents}
+    ports:
+      - "8000:8000"
+
+volumes:
+  qdrant_storage:
+
+
